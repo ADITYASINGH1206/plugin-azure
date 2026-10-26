@@ -155,7 +155,8 @@ public class Downloads extends AbstractBlobStorageWithSas
             this.moveTo,
             runContext,
             this,
-            this
+            this,
+            runContext.render(this.prefix).as(String.class).orElse(null)
         );
 
         return Output

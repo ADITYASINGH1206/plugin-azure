@@ -54,6 +54,35 @@ public class BlobService {
         return Pair.of(blobProperties, runContext.storage().putFile(tempFile));
     }
 
+    static String destinationName(String moveToName, String objectName, String prefix) {
+        var destPrefix = StringUtils.stripEnd(moveToName, "/");
+        var subpath = "";
+
+        if (prefix != null) {
+            var normPrefix = StringUtils.strip(prefix, "/");
+            var normKey = StringUtils.stripStart(objectName, "/");
+            if (!normPrefix.isEmpty()) {
+                if (normKey.startsWith(normPrefix + "/")) {
+                    subpath = normKey.substring(normPrefix.length() + 1);
+                } else if (normPrefix.contains("/")) {
+                    var folderBase = normPrefix.substring(0, normPrefix.lastIndexOf('/'));
+                    if (!folderBase.isEmpty() && normKey.startsWith(folderBase + "/")) {
+                        subpath = normKey.substring(folderBase.length() + 1);
+                    }
+                }
+            }
+        }
+
+        if (subpath.isEmpty()) {
+            subpath = FilenameUtils.getName(objectName);
+        }
+
+        if (subpath.isEmpty()) {
+            return destPrefix;
+        }
+        return destPrefix.isEmpty() ? subpath : destPrefix + "/" + subpath;
+    }
+
     public static void archive(
         List<Blob> blobsObjects,
         ActionInterface.Action action,
@@ -61,6 +90,17 @@ public class BlobService {
         RunContext runContext,
         AbstractConnectionInterface connectionInterface,
         AzureClientWithSasInterface blobStorageInterface) throws Exception {
+        archive(blobsObjects, action, moveTo, runContext, connectionInterface, blobStorageInterface, null);
+    }
+
+    public static void archive(
+        List<Blob> blobsObjects,
+        ActionInterface.Action action,
+        Copy.CopyObject moveTo,
+        RunContext runContext,
+        AbstractConnectionInterface connectionInterface,
+        AzureClientWithSasInterface blobStorageInterface,
+        String prefix) throws Exception {
         if (action == ActionInterface.Action.DELETE) {
             for (Blob object : blobsObjects) {
                 Delete delete = Delete.builder()
@@ -78,6 +118,11 @@ public class BlobService {
             }
         } else if (action == ActionInterface.Action.MOVE) {
             for (Blob object : blobsObjects) {
+                var destName = destinationName(
+                    runContext.render(moveTo.getName()).as(String.class).orElseThrow(),
+                    object.getName(),
+                    prefix
+                );
                 Copy copy = Copy.builder()
                     .id("archive")
                     .type(Copy.class.getName())
@@ -94,13 +139,8 @@ public class BlobService {
                     )
                     .to(
                         moveTo.toBuilder()
-                            .container(Property.ofValue(object.getContainer()))
-                            .name(
-                                Property.ofValue(
-                                    StringUtils.stripEnd(runContext.render(moveTo.getName()).as(String.class).orElseThrow() + "/", "/")
-                                        + "/" + FilenameUtils.getName(object.getName())
-                                )
-                            )
+                            .container(moveTo.getContainer() != null ? moveTo.getContainer() : Property.ofValue(object.getContainer()))
+                            .name(Property.ofValue(destName))
                             .build()
                     )
                     .delete(Property.ofValue(true))

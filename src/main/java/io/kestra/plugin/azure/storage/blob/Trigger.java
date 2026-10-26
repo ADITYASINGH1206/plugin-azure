@@ -397,7 +397,15 @@ public class Trigger extends AbstractTrigger implements PollingTriggerInterface,
         }
 
         writeState(runContext, rStateKey, previousState, rStateTtl);
-        BlobService.archive(actionBlobs, runContext.render(this.action).as(ActionInterface.Action.class).orElse(null), this.moveTo, runContext, this, this);
+        BlobService.archive(
+            actionBlobs,
+            runContext.render(this.action).as(ActionInterface.Action.class).orElse(null),
+            this.moveTo,
+            runContext,
+            this,
+            this,
+            runContext.render(this.prefix).as(String.class).orElse(null)
+        );
         var output = Output.builder().blobs(toFire).build();
         return Optional.of(TriggerService.generateExecution(this, conditionContext, context, output));
     }
